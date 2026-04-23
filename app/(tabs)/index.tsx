@@ -1,98 +1,133 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { router } from "expo-router";
+import React, { useEffect, useRef } from "react";
+import { Animated, StyleSheet, Text, View } from "react-native";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+export default function SplashScreen() {
+  const logoOpacity = useRef(new Animated.Value(0)).current;
+  const logoScale = useRef(new Animated.Value(0.8)).current;
+  const taglineOpacity = useRef(new Animated.Value(0)).current;
+  const lineWidth = useRef(new Animated.Value(0)).current;
 
-export default function HomeScreen() {
+  useEffect(() => {
+    Animated.sequence([
+      Animated.parallel([
+        Animated.timing(logoOpacity, {
+          toValue: 1,
+          duration: 700,
+          useNativeDriver: true,
+        }),
+        Animated.spring(logoScale, {
+          toValue: 1,
+          tension: 60,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.timing(lineWidth, {
+        toValue: 80,
+        duration: 400,
+        useNativeDriver: false,
+      }),
+      Animated.timing(taglineOpacity, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    const timer = setTimeout(() => router.replace("/login"), 2800);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
-
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    <View style={styles.container}>
+      <View style={styles.circle1} />
+      <View style={styles.circle2} />
+      <Animated.View
+        style={[
+          styles.logoBlock,
+          { opacity: logoOpacity, transform: [{ scale: logoScale }] },
+        ]}
+      >
+        <View style={styles.iconMark}>
+          <View style={styles.bar1} />
+          <View style={styles.bar2} />
+          <View style={styles.bar3} />
+        </View>
+        <Text style={styles.appName}>FitGuru</Text>
+        <Animated.View style={[styles.dividerLine, { width: lineWidth }]} />
+        <Animated.Text style={[styles.tagline, { opacity: taglineOpacity }]}>
+          Your personal gym instructor
+        </Animated.Text>
+      </Animated.View>
+      <Animated.Text style={[styles.bottomLabel, { opacity: taglineOpacity }]}>
+        Powered by AI · Built for results
+      </Animated.Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
+    backgroundColor: "#0a0a0a",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  circle1: {
+    position: "absolute",
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    backgroundColor: "#1a2e1a",
+    top: -80,
+    right: -80,
+    opacity: 0.5,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  circle2: {
+    position: "absolute",
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: "#0f2a0f",
+    bottom: 60,
+    left: -60,
+    opacity: 0.6,
+  },
+  logoBlock: { alignItems: "center" },
+  iconMark: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 5,
+    marginBottom: 20,
+  },
+  bar1: { width: 10, height: 28, backgroundColor: "#2d9e2d", borderRadius: 3 },
+  bar2: { width: 10, height: 44, backgroundColor: "#3dbf3d", borderRadius: 3 },
+  bar3: { width: 10, height: 36, backgroundColor: "#2d9e2d", borderRadius: 3 },
+  appName: {
+    fontSize: 48,
+    fontWeight: "700",
+    color: "#f0f0f0",
+    letterSpacing: -1.5,
+  },
+  dividerLine: {
+    height: 2,
+    backgroundColor: "#3dbf3d",
+    borderRadius: 2,
+    marginTop: 12,
+    marginBottom: 14,
+  },
+  tagline: {
+    fontSize: 14,
+    color: "#666",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+  },
+  bottomLabel: {
+    position: "absolute",
+    bottom: 48,
+    fontSize: 12,
+    color: "#333",
+    letterSpacing: 0.5,
   },
 });
