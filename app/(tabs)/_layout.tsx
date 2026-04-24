@@ -1,22 +1,20 @@
-import { Stack } from "expo-router";
-import { StatusBar } from "expo-status-bar";
+import { Tabs } from 'expo-router';
 
-export default function RootLayout() {
+export default function TabLayout() {
   return (
-    <>
-      <StatusBar style="light" backgroundColor="#0a0a0a" />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          animation: "fade",
-          contentStyle: { backgroundColor: "#0a0a0a" },
-        }}
-      >
-        <Stack.Screen name="index" />
-        <Stack.Screen name="login" />
-        <Stack.Screen name="onboarding" />
-        <Stack.Screen name="(tabs)" />
-      </Stack>
-    </>
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: { backgroundColor: '#0f0f0f', borderTopColor: '#1a1a1a', height: 60 },
+        tabBarActiveTintColor: '#3dbf3d',
+        tabBarInactiveTintColor: '#444',
+        tabBarLabelStyle: { fontSize: 11, marginBottom: 6 },
+      }}
+    >
+      <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: () => null }} />
+      <Tabs.Screen name="workout" options={{ title: 'Workout', tabBarIcon: () => null }} />
+      <Tabs.Screen name="diet" options={{ title: 'Diet', tabBarIcon: () => null }} />
+      <Tabs.Screen name="progress" options={{ title: 'Progress', tabBarIcon: () => null }} />
+    </Tabs>
   );
 }
