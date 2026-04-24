@@ -53,52 +53,63 @@ interface Exercise {
 // ── GIF Image with loading skeleton ──
 function GifImage({ uri, style }: { uri: string; style: any }) {
   const [loaded, setLoaded] = useState(false);
+  const [errored, setErrored] = useState(false);
   const shimmer = useRef(new Animated.Value(0)).current;
+  const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
+    // Shimmer animation
     Animated.loop(
       Animated.sequence([
-        Animated.timing(shimmer, {
-          toValue: 1,
-          duration: 900,
-          useNativeDriver: true,
-        }),
-        Animated.timing(shimmer, {
-          toValue: 0,
-          duration: 900,
-          useNativeDriver: true,
-        }),
-      ]),
+        Animated.timing(shimmer, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(shimmer, { toValue: 0, duration: 800, useNativeDriver: true }),
+      ])
+    ).start();
+
+    // Pulse animation for the icon
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.15, duration: 600, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 600, useNativeDriver: true }),
+      ])
     ).start();
   }, []);
 
   return (
-    <View style={[style, { backgroundColor: "#111" }]}>
-      {!loaded && (
+    <View style={[style, { backgroundColor: '#0f0f0f', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }]}>
+      {/* Shimmer background always shown until loaded */}
+      {!loaded && !errored && (
         <Animated.View
           style={[
             StyleSheet.absoluteFill,
             {
-              backgroundColor: "#1a1a1a",
-              opacity: shimmer.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0.4, 1],
-              }),
+              backgroundColor: '#1a1a1a',
+              opacity: shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.8] }),
             },
           ]}
         />
       )}
+
+      {/* Fallback icon when no API key or error */}
+      {(errored || !loaded) && (
+        <Animated.Text style={{ fontSize: 28, transform: [{ scale: pulse }] }}>
+          💪
+        </Animated.Text>
+      )}
+
+      {/* Actual GIF */}
       <Image
         source={{ uri }}
         style={[
           style,
           {
-            position: loaded ? "relative" : "absolute",
+            position: 'absolute',
             opacity: loaded ? 1 : 0,
           },
         ]}
         resizeMode="cover"
         onLoad={() => setLoaded(true)}
+        onError={() => setErrored(true)}
       />
     </View>
   );
@@ -149,7 +160,7 @@ export default function WorkoutScreen() {
     setLoading(true);
     setActiveFilter("all");
     try {
-      const API_KEY = "YOUR_RAPIDAPI_KEY";
+      const API_KEY = "0c166b4209msh42f9619a6b07f52p120803jsnf3970fda32d2";
       const response = await fetch(
         `https://exercisedb.p.rapidapi.com/exercises/bodyPart/${muscle}?limit=10`,
         {
