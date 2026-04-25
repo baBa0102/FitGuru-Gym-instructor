@@ -61,30 +61,59 @@ function GifImage({ uri, style }: { uri: string; style: any }) {
     // Shimmer animation
     Animated.loop(
       Animated.sequence([
-        Animated.timing(shimmer, { toValue: 1, duration: 800, useNativeDriver: true }),
-        Animated.timing(shimmer, { toValue: 0, duration: 800, useNativeDriver: true }),
-      ])
+        Animated.timing(shimmer, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shimmer, {
+          toValue: 0,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ]),
     ).start();
 
     // Pulse animation for the icon
     Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.15, duration: 600, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 600, useNativeDriver: true }),
-      ])
+        Animated.timing(pulse, {
+          toValue: 1.15,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ]),
     ).start();
   }, []);
 
   return (
-    <View style={[style, { backgroundColor: '#0f0f0f', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }]}>
+    <View
+      style={[
+        style,
+        {
+          backgroundColor: "#0f0f0f",
+          overflow: "hidden",
+          alignItems: "center",
+          justifyContent: "center",
+        },
+      ]}
+    >
       {/* Shimmer background always shown until loaded */}
       {!loaded && !errored && (
         <Animated.View
           style={[
             StyleSheet.absoluteFill,
             {
-              backgroundColor: '#1a1a1a',
-              opacity: shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.8] }),
+              backgroundColor: "#1a1a1a",
+              opacity: shimmer.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.3, 0.8],
+              }),
             },
           ]}
         />
@@ -103,7 +132,7 @@ function GifImage({ uri, style }: { uri: string; style: any }) {
         style={[
           style,
           {
-            position: 'absolute',
+            position: "absolute",
             opacity: loaded ? 1 : 0,
           },
         ]}
@@ -157,28 +186,62 @@ export default function WorkoutScreen() {
   }, [selectedDay, dayPlans]);
 
   const fetchExercises = async (muscle: string) => {
-    setLoading(true);
-    setActiveFilter("all");
-    try {
-      const API_KEY = "0c166b4209msh42f9619a6b07f52p120803jsnf3970fda32d2";
-      const response = await fetch(
-        `https://exercisedb.p.rapidapi.com/exercises/bodyPart/${muscle}?limit=10`,
-        {
-          headers: {
-            "X-RapidAPI-Key": API_KEY,
-            "X-RapidAPI-Host": "exercisedb.p.rapidapi.com",
-          },
+  // 1. Get the Key and check it immediately to satisfy TypeScript
+  const API_KEY = process.env.EXPO_PUBLIC_RAPID_API_KEY;
+
+  if (!API_KEY) {
+    console.error("❌ API Key is missing! Check your .env file and restart Expo.");
+    setExercises(getMockExercises(muscle));
+    return;
+  }
+
+  // 2. Set UI states
+  setLoading(true);
+  setActiveFilter("all");
+
+  try {
+    const response = await fetch(
+      `https://exercisedb.p.rapidapi.com/exercises/bodyPart/${muscle}?limit=10`,
+      {
+        headers: {
+          "X-RapidAPI-Key": API_KEY, // TS now knows this is a string
+          "X-RapidAPI-Host": "exercisedb.p.rapidapi.com",
         },
-      );
-      if (!response.ok) throw new Error("API error");
-      const data = await response.json();
-      setExercises(data);
-    } catch (e) {
-      setExercises(getMockExercises(muscle));
-    } finally {
-      setLoading(false);
+      }
+    );
+
+    if (!response.ok) {
+      const errorMsg = await response.text();
+      throw new Error(`API error: ${response.status} - ${errorMsg}`);
     }
-  };
+
+    const data = await response.json();
+
+    // 3. Map exercises with the proper GIF URL format
+    const mapped = data.map((ex: any) => ({
+      id: ex.id,
+      name: ex.name,
+      bodyPart: ex.bodyPart,
+      target: ex.target,
+      equipment: ex.equipment,
+      // ExerciseDB v2 requires the key in the URL for direct image access
+      gifUrl: `https://exercisedb.p.rapidapi.com/image?exerciseId=${ex.id}&resolution=360&rapidapi-key=${API_KEY}`,
+      instructions: ex.instructions || [],
+      secondaryMuscles: ex.secondaryMuscles || [],
+    }));
+
+    console.log("✅ Exercises loaded successfully");
+    setExercises(mapped);
+    
+  } catch (e) {
+    console.log("❌ Fetch error details:", e);
+    // Fallback to mock data so the app doesn't stay empty
+    setExercises(getMockExercises(muscle));
+  } finally {
+    // 4. Stop loading animation regardless of success or failure
+    setLoading(false);
+  }
+};
 
   const openMusclePicker = () => {
     setShowMusclePicker(true);
@@ -1216,10 +1279,11 @@ const styles = StyleSheet.create({
   },
   completionLabel: { fontSize: 10, color: "#444" },
 
-  dayScroll: { paddingHorizontal: 20, paddingBottom: 12, gap: 8 },
+  dayScroll: { paddingHorizontal: 20, paddingBottom:40, gap: 8 },
   dayBtn: {
     alignItems: "center",
     paddingHorizontal: 14,
+    paddingBottom:14,
     paddingVertical: 10,
     borderRadius: 14,
     backgroundColor: "#111",
@@ -1246,18 +1310,19 @@ const styles = StyleSheet.create({
   },
 
   changeBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginHorizontal: 20,
-    marginBottom: 12,
-    backgroundColor: "#111",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 11,
-    borderWidth: 0.5,
-    borderColor: "#2a2a2a",
-  },
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  marginHorizontal: 20,
+  marginTop: 4,        // ← CHANGED: was 0 or missing
+  marginBottom: 12,
+  backgroundColor: "#111",
+  borderRadius: 12,
+  paddingHorizontal: 16,
+  paddingVertical: 11,
+  borderWidth: 0.5,
+  borderColor: "#2a2a2a",
+},
   changeBtnText: { fontSize: 13, color: "#666", fontWeight: "500" },
   changeBtnArrow: { fontSize: 14, color: "#3dbf3d" },
 
@@ -1270,6 +1335,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
+    paddingTop: 52,
     paddingBottom: 40,
     borderWidth: 0.5,
     borderColor: "#222",
@@ -1325,16 +1391,20 @@ const styles = StyleSheet.create({
   progressFill: { height: "100%", backgroundColor: "#3dbf3d", borderRadius: 2 },
   progressLabel: { fontSize: 11, color: "#555", width: 30, textAlign: "right" },
 
-  filterScroll: { paddingHorizontal: 20, paddingBottom: 12, gap: 8 },
+  filterScroll: { paddingHorizontal: 20, paddingVertical: 4, marginBottom: 16,},
   filterChip: {
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 20,
     backgroundColor: "#111",
-    borderWidth: 0.5,
+    borderWidth: 1.5,
     borderColor: "#1e1e1e",
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 60,
+    marginRight: 10,
   },
-  filterChipActive: { backgroundColor: "#0d1f0d", borderColor: "#3dbf3d" },
+  filterChipActive: { backgroundColor: "#0d1f0d", borderColor: "#3dbf3d", },
   filterText: { fontSize: 12, color: "#555", fontWeight: "500" },
   filterTextActive: { color: "#3dbf3d" },
 
@@ -1355,7 +1425,7 @@ const styles = StyleSheet.create({
   },
   restSub: { fontSize: 14, color: "#555", textAlign: "center", lineHeight: 22 },
 
-  exerciseList: { paddingHorizontal: 20, paddingBottom: 100, gap: 12 },
+  exerciseList: { paddingHorizontal: 20,paddingTop:10, paddingBottom: 120, gap: 12 },
   exerciseCard: {
     backgroundColor: "#111",
     borderRadius: 16,
@@ -1364,6 +1434,8 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: "#1e1e1e",
     overflow: "hidden",
+    marginBottom: 12,
+    minHeight: 90,
   },
   exerciseCardDone: { opacity: 0.5 },
   gifWrap: {
@@ -1371,6 +1443,8 @@ const styles = StyleSheet.create({
     height: 90,
     backgroundColor: "#0a0a0a",
     position: "relative",
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   gifThumb: { width: 90, height: 90 },
   genderTag: {
@@ -1404,7 +1478,8 @@ const styles = StyleSheet.create({
   targetText: { fontSize: 10, color: "#3dbf3d", fontWeight: "600" },
   completeBtn: {
     width: 40,
-    height: 90,
+    // height: 90,
+    alignSelf: 'stretch',
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#0f0f0f",
