@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { router } from "expo-router";
 import {
   Animated,
   Dimensions,
@@ -9,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useAuth } from "../../contexts/AuthContext";
 
 const { width } = Dimensions.get("window");
 
@@ -51,6 +53,7 @@ const TODAY_MEALS = [
 const TOTAL_CALS = TODAY_MEALS.reduce((a, m) => a + m.cals, 0);
 
 export default function HomeScreen() {
+  const { profile } = useAuth();
   const [checkedExercises, setCheckedExercises] = useState<Set<number>>(
     new Set(),
   );
@@ -117,6 +120,7 @@ export default function HomeScreen() {
     inputRange: [0, 1],
     outputRange: ["0%", "100%"],
   });
+  const userName = profile?.name?.trim() || USER.name;
 
   return (
     <View style={styles.container}>
@@ -129,10 +133,13 @@ export default function HomeScreen() {
       >
         <View>
           <Text style={styles.greeting}>{greeting()},</Text>
-          <Text style={styles.userName}>{USER.name} 👋</Text>
+          <Text style={styles.userName}>{userName} 👋</Text>
         </View>
-        <TouchableOpacity style={styles.avatarBtn}>
-          <Text style={styles.avatarText}>{USER.name[0]}</Text>
+        <TouchableOpacity
+          style={styles.avatarBtn}
+          onPress={() => router.push("/(tabs)/profile")}
+        >
+          <Text style={styles.avatarText}>{userName[0]}</Text>
         </TouchableOpacity>
       </Animated.View>
 
@@ -205,10 +212,10 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* ── Today's Workout ── */}
+          {/* ── Today&apos;s Workout ── */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Today's workout</Text>
+              <Text style={styles.sectionTitle}>Today&apos;s workout</Text>
               <TouchableOpacity>
                 <Text style={styles.sectionLink}>See all →</Text>
               </TouchableOpacity>
@@ -273,10 +280,10 @@ export default function HomeScreen() {
             )}
           </View>
 
-          {/* ── Today's Diet ── */}
+          {/* ── Today&apos;s Diet ── */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Today's diet</Text>
+              <Text style={styles.sectionTitle}>Today&apos;s diet</Text>
               <TouchableOpacity>
                 <Text style={styles.sectionLink}>See all →</Text>
               </TouchableOpacity>

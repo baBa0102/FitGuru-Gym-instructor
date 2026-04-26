@@ -38,6 +38,15 @@ const USER = {
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const todayIdx = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
+const DEFAULT_DAY_PLANS: Record<number, string[]> = {
+  0: ["chest"],
+  1: ["back"],
+  2: ["upper legs"],
+  3: ["rest"],
+  4: ["shoulders"],
+  5: ["upper arms"],
+  6: ["rest"],
+};
 
 interface Exercise {
   id: string;
@@ -154,16 +163,8 @@ export default function WorkoutScreen() {
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   const [activeFilter, setActiveFilter] = useState("all");
   const [showMusclePicker, setShowMusclePicker] = useState(false);
-  // dayPlans stores what muscle (or 'rest') is assigned to each day index
-  const [dayPlans, setDayPlans] = useState<Record<number, string>>({
-    0: "chest",
-    1: "back",
-    2: "upper legs",
-    3: "rest",
-    4: "shoulders",
-    5: "upper arms",
-    6: "rest",
-  });
+  // dayPlans stores selected muscle groups (or ['rest']) by day index
+  const [dayPlans, setDayPlans] = useState<Record<number, string[]>>(DEFAULT_DAY_PLANS);
   const modalAnim = useRef(new Animated.Value(0)).current;
   const muscleModalAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -177,21 +178,22 @@ export default function WorkoutScreen() {
   }, []);
 
   useEffect(() => {
-    const muscle = dayPlans[selectedDay];
-    if (!muscle || muscle === "rest") {
+    const muscles = dayPlans[selectedDay] || [];
+    if (muscles.length === 0 || muscles.includes("rest")) {
       setExercises([]);
       return;
     }
-    fetchExercises(muscle);
+    fetchExercises(muscles);
   }, [selectedDay, dayPlans]);
 
-  const fetchExercises = async (muscle: string) => {
+  const fetchExercises = async (muscles: string[]) => {
   // 1. Get the Key and check it immediately to satisfy TypeScript
   const API_KEY = process.env.EXPO_PUBLIC_RAPID_API_KEY;
 
   if (!API_KEY) {
     console.error("❌ API Key is missing! Check your .env file and restart Expo.");
-    setExercises(getMockExercises(muscle));
+    const fallback = muscles.flatMap((muscle) => getMockExercises(muscle));
+    setExercises(uniqueExercisesById(fallback));
     return;
   }
 
@@ -200,35 +202,38 @@ export default function WorkoutScreen() {
   setActiveFilter("all");
 
   try {
-    const response = await fetch(
-      `https://exercisedb.p.rapidapi.com/exercises/bodyPart/${muscle}?limit=10`,
-      {
-        headers: {
-          "X-RapidAPI-Key": API_KEY, // TS now knows this is a string
-          "X-RapidAPI-Host": "exercisedb.p.rapidapi.com",
-        },
-      }
+    const responses = await Promise.all(
+      muscles.map(async (muscle) => {
+        const response = await fetch(
+          `https://exercisedb.p.rapidapi.com/exercises/bodyPart/${muscle}?limit=10`,
+          {
+            headers: {
+              "X-RapidAPI-Key": API_KEY,
+              "X-RapidAPI-Host": "exercisedb.p.rapidapi.com",
+            },
+          }
+        );
+
+        if (!response.ok) {
+          const errorMsg = await response.text();
+          throw new Error(`API error for ${muscle}: ${response.status} - ${errorMsg}`);
+        }
+
+        const data = await response.json();
+        return data.map((ex: any) => ({
+          id: ex.id,
+          name: ex.name,
+          bodyPart: ex.bodyPart,
+          target: ex.target,
+          equipment: ex.equipment,
+          gifUrl: `https://exercisedb.p.rapidapi.com/image?exerciseId=${ex.id}&resolution=360&rapidapi-key=${API_KEY}`,
+          instructions: ex.instructions || [],
+          secondaryMuscles: ex.secondaryMuscles || [],
+        }));
+      })
     );
 
-    if (!response.ok) {
-      const errorMsg = await response.text();
-      throw new Error(`API error: ${response.status} - ${errorMsg}`);
-    }
-
-    const data = await response.json();
-
-    // 3. Map exercises with the proper GIF URL format
-    const mapped = data.map((ex: any) => ({
-      id: ex.id,
-      name: ex.name,
-      bodyPart: ex.bodyPart,
-      target: ex.target,
-      equipment: ex.equipment,
-      // ExerciseDB v2 requires the key in the URL for direct image access
-      gifUrl: `https://exercisedb.p.rapidapi.com/image?exerciseId=${ex.id}&resolution=360&rapidapi-key=${API_KEY}`,
-      instructions: ex.instructions || [],
-      secondaryMuscles: ex.secondaryMuscles || [],
-    }));
+    const mapped = uniqueExercisesById(responses.flat());
 
     console.log("✅ Exercises loaded successfully");
     setExercises(mapped);
@@ -236,7 +241,8 @@ export default function WorkoutScreen() {
   } catch (e) {
     console.log("❌ Fetch error details:", e);
     // Fallback to mock data so the app doesn't stay empty
-    setExercises(getMockExercises(muscle));
+    const fallback = muscles.flatMap((muscle) => getMockExercises(muscle));
+    setExercises(uniqueExercisesById(fallback));
   } finally {
     // 4. Stop loading animation regardless of success or failure
     setLoading(false);
@@ -262,10 +268,24 @@ export default function WorkoutScreen() {
     }).start(() => setShowMusclePicker(false));
   };
 
-  const assignMuscle = (muscleId: string) => {
-    setDayPlans((prev) => ({ ...prev, [selectedDay]: muscleId }));
+  const toggleMuscleInDay = (muscleId: string) => {
+    setDayPlans((prev) => {
+      const daySelection = prev[selectedDay] || [];
+      const withoutRest = daySelection.filter((id) => id !== "rest");
+      const nextSelection = withoutRest.includes(muscleId)
+        ? withoutRest.filter((id) => id !== muscleId)
+        : [...withoutRest, muscleId];
+      return {
+        ...prev,
+        [selectedDay]: nextSelection.length ? nextSelection : ["rest"],
+      };
+    });
     setCompletedIds(new Set());
-    closeMusclePicker();
+  };
+
+  const setRestDay = () => {
+    setDayPlans((prev) => ({ ...prev, [selectedDay]: ["rest"] }));
+    setCompletedIds(new Set());
   };
 
   const openExercise = (ex: Exercise) => {
@@ -306,6 +326,8 @@ export default function WorkoutScreen() {
       ? exercises
       : exercises.filter((e) => e.bodyPart === activeFilter);
   const completedCount = exercises.filter((e) => completedIds.has(e.id)).length;
+  const selectedDayPlan = dayPlans[selectedDay] || ["rest"];
+  const isRestDay = selectedDayPlan.includes("rest") || selectedDayPlan.length === 0;
 
   return (
     <View style={styles.container}>
@@ -332,9 +354,14 @@ export default function WorkoutScreen() {
         contentContainerStyle={styles.dayScroll}
       >
         {DAYS.map((day, i) => {
-          const plan = dayPlans[i];
-          const muscleInfo = ALL_MUSCLES.find((m) => m.id === plan);
-          const isRest = plan === "rest" || !plan;
+          const plan = dayPlans[i] || ["rest"];
+          const isRest = plan.includes("rest") || plan.length === 0;
+          const muscleInfos = ALL_MUSCLES.filter((m) => plan.includes(m.id));
+          const primaryIcon = muscleInfos[0]?.icon ?? "💪";
+          const label =
+            muscleInfos.length > 1
+              ? `${muscleInfos[0].label} +${muscleInfos.length - 1}`
+              : muscleInfos[0]?.label ?? "Custom";
           return (
             <TouchableOpacity
               key={i}
@@ -358,7 +385,7 @@ export default function WorkoutScreen() {
                 {day}
               </Text>
               <Text style={styles.dayMuscleIcon}>
-                {isRest ? "😴" : (muscleInfo?.icon ?? "💪")}
+                {isRest ? "😴" : primaryIcon}
               </Text>
               <Text
                 style={[
@@ -367,7 +394,7 @@ export default function WorkoutScreen() {
                 ]}
                 numberOfLines={1}
               >
-                {isRest ? "Rest" : (muscleInfo?.label ?? "Custom")}
+                {isRest ? "Rest" : label}
               </Text>
               {i === todayIdx && <View style={styles.todayDot} />}
             </TouchableOpacity>
@@ -382,9 +409,12 @@ export default function WorkoutScreen() {
         activeOpacity={0.8}
       >
         <Text style={styles.changeBtnText}>
-          {dayPlans[selectedDay] === "rest"
+          {isRestDay
             ? "😴 Rest day · tap to change"
-            : `💪 ${ALL_MUSCLES.find((m) => m.id === dayPlans[selectedDay])?.label ?? "Custom"} day · tap to change`}
+            : `💪 ${selectedDayPlan
+                .map((id) => ALL_MUSCLES.find((m) => m.id === id)?.label)
+                .filter(Boolean)
+                .join(", ")} · tap to change`}
         </Text>
         <Text style={styles.changeBtnArrow}>↓</Text>
       </TouchableOpacity>
@@ -442,12 +472,21 @@ export default function WorkoutScreen() {
           <Text style={styles.loadingText}>Loading exercises...</Text>
           <Text style={styles.loadingNote}>⚠ Requires internet connection</Text>
         </View>
-      ) : dayPlans[selectedDay] === "rest" || !dayPlans[selectedDay] ? (
+      ) : isRestDay ? (
         <View style={styles.centered}>
           <Text style={styles.restIcon}>😴</Text>
           <Text style={styles.restTitle}>Rest day</Text>
           <Text style={styles.restSub}>
             Recovery is part of the plan. Stay hydrated and sleep well.
+          </Text>
+        </View>
+      ) : filtered.length === 0 ? (
+        <View style={styles.centered}>
+          <Text style={styles.restIcon}>🏋️</Text>
+          <Text style={styles.restTitle}>No exercises yet</Text>
+          <Text style={styles.restSub}>
+            No exercises match this day/filter. Tap the day plan bar above to
+            pick a muscle group.
           </Text>
         </View>
       ) : (
@@ -662,16 +701,16 @@ export default function WorkoutScreen() {
                   key={m.id}
                   style={[
                     styles.muscleChip,
-                    dayPlans[selectedDay] === m.id && styles.muscleChipActive,
+                    selectedDayPlan.includes(m.id) && styles.muscleChipActive,
                   ]}
-                  onPress={() => assignMuscle(m.id)}
+                  onPress={() => toggleMuscleInDay(m.id)}
                   activeOpacity={0.8}
                 >
                   <Text style={styles.muscleChipIcon}>{m.icon}</Text>
                   <Text
                     style={[
                       styles.muscleChipLabel,
-                      dayPlans[selectedDay] === m.id &&
+                      selectedDayPlan.includes(m.id) &&
                         styles.muscleChipLabelActive,
                     ]}
                   >
@@ -685,21 +724,26 @@ export default function WorkoutScreen() {
                 style={[
                   styles.muscleChip,
                   styles.muscleChipRest,
-                  dayPlans[selectedDay] === "rest" &&
+                  isRestDay &&
                     styles.muscleChipRestActive,
                 ]}
-                onPress={() => assignMuscle("rest")}
+                onPress={setRestDay}
                 activeOpacity={0.8}
               >
                 <Text style={styles.muscleChipIcon}>😴</Text>
                 <Text
                   style={[
                     styles.muscleChipLabel,
-                    dayPlans[selectedDay] === "rest" && { color: "#ba7517" },
+                    isRestDay && { color: "#ba7517" },
                   ]}
                 >
                   Rest
                 </Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.muscleActions}>
+              <TouchableOpacity style={styles.muscleDoneBtn} onPress={closeMusclePicker}>
+                <Text style={styles.muscleDoneBtnText}>Done</Text>
               </TouchableOpacity>
             </View>
           </Animated.View>
@@ -1245,6 +1289,14 @@ const getMockExercises = (muscle?: string): Exercise[] => {
   return MOCK_BY_MUSCLE[key] || MOCK_BY_MUSCLE["chest"];
 };
 
+const uniqueExercisesById = (items: Exercise[]): Exercise[] => {
+  const map = new Map<string, Exercise>();
+  items.forEach((item) => {
+    if (!map.has(item.id)) map.set(item.id, item);
+  });
+  return Array.from(map.values());
+};
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0a0a0a" },
 
@@ -1279,11 +1331,10 @@ const styles = StyleSheet.create({
   },
   completionLabel: { fontSize: 10, color: "#444" },
 
-  dayScroll: { paddingHorizontal: 20, paddingBottom:40, gap: 8 },
+  dayScroll: { paddingHorizontal: 20, paddingBottom: 4, gap: 8 },
   dayBtn: {
     alignItems: "center",
     paddingHorizontal: 14,
-    paddingBottom:14,
     paddingVertical: 10,
     borderRadius: 14,
     backgroundColor: "#111",
@@ -1297,7 +1348,7 @@ const styles = StyleSheet.create({
   dayLabel: { fontSize: 11, color: "#555", fontWeight: "600", marginBottom: 2 },
   dayLabelActive: { color: "#3dbf3d" },
   dayMuscleIcon: { fontSize: 16, marginBottom: 2 },
-  daySplit: { fontSize: 9, color: "#333" },
+  daySplit: { fontSize: 9, color: "#333", textAlign: "center", maxWidth: 70 },
   daySplitActive: { color: "#3dbf3d" },
   todayDot: {
     width: 4,
@@ -1314,7 +1365,7 @@ const styles = StyleSheet.create({
   alignItems: "center",
   justifyContent: "space-between",
   marginHorizontal: 20,
-  marginTop: 4,        // ← CHANGED: was 0 or missing
+  marginTop: 2,
   marginBottom: 12,
   backgroundColor: "#111",
   borderRadius: 12,
@@ -1323,7 +1374,7 @@ const styles = StyleSheet.create({
   borderWidth: 0.5,
   borderColor: "#2a2a2a",
 },
-  changeBtnText: { fontSize: 13, color: "#666", fontWeight: "500" },
+  changeBtnText: { fontSize: 13, color: "#666", fontWeight: "500", flex: 1, paddingRight: 10 },
   changeBtnArrow: { fontSize: 14, color: "#3dbf3d" },
 
   muscleSheet: {
@@ -1373,6 +1424,14 @@ const styles = StyleSheet.create({
   muscleChipIcon: { fontSize: 16 },
   muscleChipLabel: { fontSize: 13, color: "#888", fontWeight: "500" },
   muscleChipLabelActive: { color: "#3dbf3d" },
+  muscleActions: { marginTop: 18, alignItems: "flex-end" },
+  muscleDoneBtn: {
+    backgroundColor: "#3dbf3d",
+    borderRadius: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  muscleDoneBtnText: { color: "#0a0a0a", fontSize: 13, fontWeight: "700" },
 
   progressWrap: {
     flexDirection: "row",
@@ -1391,7 +1450,7 @@ const styles = StyleSheet.create({
   progressFill: { height: "100%", backgroundColor: "#3dbf3d", borderRadius: 2 },
   progressLabel: { fontSize: 11, color: "#555", width: 30, textAlign: "right" },
 
-  filterScroll: { paddingHorizontal: 20, paddingVertical: 4, marginBottom: 16,},
+  filterScroll: { paddingHorizontal: 20, paddingVertical: 4, marginBottom: 10 },
   filterChip: {
     paddingHorizontal: 14,
     paddingVertical: 7,

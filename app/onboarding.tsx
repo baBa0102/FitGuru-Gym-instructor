@@ -13,6 +13,10 @@ import {
   Alert,
 } from 'react-native';
 import { router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../contexts/AuthContext';
+import { auth, db } from '../config/firebaseConfig';
+import { doc, setDoc } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
 
@@ -28,6 +32,7 @@ const GOALS = [
 const STEPS = ['Personal info', 'Body stats', 'Your goal'];
 
 export default function OnboardingScreen() {
+  const { user } = useAuth();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({
     name: '',
@@ -73,13 +78,41 @@ export default function OnboardingScreen() {
     return true;
   };
 
-  const goNext = () => {
+  const goNext = async () => {
     if (!validateStep()) return;
     if (step < 2) {
       animateNext(1, () => setStep(s => s + 1));
     } else {
-      // Save profile & navigate to home
-      // AsyncStorage.setItem('userProfile', JSON.stringify(form)); // add later
+      if (!user && !auth.currentUser) {
+        Alert.alert('Authorization required', 'Please login before completing onboarding.');
+        router.replace('/login');
+        return;
+      }
+      const activeUser = user ?? auth.currentUser;
+      if (!activeUser) return;
+      const today = new Date().toISOString().split('T')[0];
+      const savedProfile = {
+        uid: activeUser.uid,
+        phone: activeUser.phoneNumber || '',
+        name: form.name.trim(),
+        age: Number(form.age),
+        gender: form.gender,
+        weight: Number(form.weight),
+        weightUnit: form.weightUnit,
+        height: Number(form.height),
+        heightUnit: form.heightUnit,
+        goal: form.goal,
+        joinedAt: today,
+        lastWeightCheck: null,
+        dayPlans: {},
+        completedExercises: {},
+        weightHistory: [],
+      };
+      await setDoc(doc(db, 'users', activeUser.uid), savedProfile, { merge: true });
+      await AsyncStorage.multiSet([
+        ['userProfile', JSON.stringify(savedProfile)],
+        ['isOnboarded', 'true'],
+      ]);
       router.replace('/(tabs)');
     }
   };
@@ -150,7 +183,7 @@ export default function OnboardingScreen() {
           {step === 0 && (
             <View>
               <Text style={styles.stepTitle}>Tell us about yourself</Text>
-              <Text style={styles.stepSub}>We'll personalise your plan based on your profile</Text>
+              <Text style={styles.stepSub}>We&apos;ll personalise your plan based on your profile</Text>
 
               <Text style={styles.fieldLabel}>Your name</Text>
               <TextInput
@@ -272,8 +305,8 @@ export default function OnboardingScreen() {
           {/* ── STEP 2: Goal ── */}
           {step === 2 && (
             <View>
-              <Text style={styles.stepTitle}>What's your goal?</Text>
-              <Text style={styles.stepSub}>We'll build your workout and diet plan around this</Text>
+              <Text style={styles.stepTitle}>What&apos;s your goal?</Text>
+              <Text style={styles.stepSub}>We&apos;ll build your workout and diet plan around this</Text>
 
               <View style={styles.goalsGrid}>
                 {GOALS.map(goal => (
