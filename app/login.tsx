@@ -66,22 +66,52 @@ const handlePostAuthRouting = async () => {
 
   const signInWithEmail = async () => {
   if (!email.trim() || !password.trim()) {
-    Alert.alert("Missing credentials", "Please enter email and password.");
+    const msg = "Please enter both email and password.";
+    Platform.OS === 'web' ? alert(msg) : Alert.alert("Missing Info", msg);
     return;
   }
+
   setLoading(true);
   try {
     if (isSignup) {
       await createUserWithEmailAndPassword(auth, email.trim(), password);
-      // SUCCESS: Firebase automatically logs the user in here.
-      // handlePostAuthRouting will now see NO firestore doc and send to onboarding.
     } else {
       await signInWithEmailAndPassword(auth, email.trim(), password);
     }
     await handlePostAuthRouting();
   } catch (error: any) {
-    console.error("Auth Error:", error); // This is what showed up in your console
-    Alert.alert("Auth Error", getAuthErrorMessage(error));
+    console.error("Auth Error Code:", error.code);
+
+    let title = "Login Issue";
+    let errorMessage = "An unexpected error occurred. Please try again.";
+
+    // Handle specific Firebase error codes
+    switch (error.code) {
+      case 'auth/invalid-credential':
+      case 'auth/user-not-found':
+      case 'auth/wrong-password':
+        errorMessage = "Invalid email or password. If you don't have an account, please click to 'New User' below.";
+        break;
+      case 'auth/email-already-in-use':
+        errorMessage = "This email is already registered. Please sign in instead.";
+        break;
+      case 'auth/invalid-email':
+        errorMessage = "Please enter a valid email address.";
+        break;
+      case 'auth/weak-password':
+        errorMessage = "Password is too weak. Please use at least 6 characters.";
+        break;
+      case 'auth/too-many-requests':
+        errorMessage = "Too many failed attempts. Please try again later.";
+        break;
+    }
+
+    // Display the alert based on platform
+    if (Platform.OS === 'web') {
+      alert(`${title}\n\n${errorMessage}`);
+    } else {
+      Alert.alert(title, errorMessage);
+    }
   } finally {
     setLoading(false);
   }

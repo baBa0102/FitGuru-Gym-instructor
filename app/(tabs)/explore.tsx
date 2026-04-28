@@ -94,6 +94,11 @@ export default function TabTwoScreen() {
           ),
         })}
       </Collapsible>
+      <Collapsible title="About Developer">
+      <ThemedText>Basit Shameem - Bachelor of Computer Applications from Chandigarh University. <ExternalLink href="https://berry0102.pythonanywhere.com">
+          <ThemedText type="link"> Visit profile</ThemedText>
+        </ExternalLink></ThemedText>
+      </Collapsible>
     </ParallaxScrollView>
   );
 }
