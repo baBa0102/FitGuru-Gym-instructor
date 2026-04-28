@@ -1,10 +1,7 @@
-// Context for managing authentication and user data
-// Place at: /contexts/AuthContext.tsx
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { auth, db } from '../config/firebaseConfig';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface UserProfile {
@@ -21,7 +18,7 @@ interface UserProfile {
   joinedAt: string;
   lastWeightCheck: string | null;
   dayPlans: Record<number, string[]>;
-  completedExercises: Record<string, string[]>; // date -> exerciseIds
+  completedExercises: Record<string, string[]>;
   weightHistory: Array<{ date: string; weight: number }>;
 }
 
@@ -33,6 +30,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   logWeight: (weight: number) => Promise<void>;
   markExerciseComplete: (exerciseId: string) => Promise<void>;
+  refreshProfile: () => Promise<void>; // Added to sync state after onboarding
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -45,14 +43,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setLoading(true); // Re-enter loading state during auth transition
       setUser(firebaseUser);
+      
       if (firebaseUser) {
         await loadProfile(firebaseUser.uid);
       } else {
         setProfile(null);
         await AsyncStorage.removeItem(PROFILE_STORAGE_KEY);
       }
-      setLoading(false);
+      
+      setLoading(false); // Only stop loading once profile logic is finished
     });
     return unsubscribe;
   }, []);
@@ -67,37 +68,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfile(remoteProfile);
         await AsyncStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(remoteProfile));
       } else {
-        // Only use cache if it matches the current user's UID
-        const cached = await AsyncStorage.getItem(PROFILE_STORAGE_KEY);
-        if (cached) {
-          const parsedCache = JSON.parse(cached) as UserProfile;
-          if (parsedCache.uid === uid) {
-            setProfile(parsedCache);
-          } else {
-            // Cache belongs to a different user, wipe it
-            setProfile(null);
-            await AsyncStorage.removeItem(PROFILE_STORAGE_KEY);
-          }
-        } else {
-          setProfile(null);
-        }
+        setProfile(null); // Explicitly null if no Firestore doc exists
       }
     } catch (error) {
       console.error('Error loading profile:', error);
-      setProfile(null); // Default to null on error to force onboarding check
+      setProfile(null);
+    }
+  };
+
+  const refreshProfile = async () => {
+    if (auth.currentUser) {
+      await loadProfile(auth.currentUser.uid);
     }
   };
 
   const updateProfile = async (updates: Partial<UserProfile>) => {
-    if (!profile) return;
-    const merged = { ...profile, ...updates };
-    setProfile(merged);
-    await AsyncStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(merged));
-
-    if (!user) return;
+    if (!profile || !user) return;
     try {
+      const merged = { ...profile, ...updates };
       const docRef = doc(db, 'users', user.uid);
       await setDoc(docRef, updates, { merge: true });
+      setProfile(merged);
+      await AsyncStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(merged));
     } catch (error) {
       console.error('Error updating profile:', error);
     }
@@ -106,8 +98,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     try {
       await signOut(auth);
-      await AsyncStorage.clear();
+      await AsyncStorage.removeItem(PROFILE_STORAGE_KEY);
       setProfile(null);
+      setUser(null);
     } catch (error) {
       console.error('Logout error:', error);
     }
@@ -137,7 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, profile, loading, updateProfile, logout, logWeight, markExerciseComplete }}
+      value={{ user, profile, loading, updateProfile, logout, logWeight, markExerciseComplete, refreshProfile }}
     >
       {children}
     </AuthContext.Provider>

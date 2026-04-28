@@ -17,21 +17,38 @@ export default function ProfileScreen() {
   const [weeklyAlerts, setWeeklyAlerts] = useState(true);
 
   const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout? Your progress is saved.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            await logout();
-            router.replace('/login');
+    const performLogout = async () => {
+      try {
+        await logout();
+        // The AuthContext clears state, but we force the redirect here 
+        // to ensure the UI updates immediately.
+        router.replace('/login');
+      } catch (error) {
+        console.error("Logout failed", error);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      // Standard browser confirmation for Web
+      const confirmed = window.confirm('Are you sure you want to logout? Your progress is saved.');
+      if (confirmed) {
+        performLogout();
+      }
+    } else {
+      // Native Mobile Alert
+      Alert.alert(
+        'Logout',
+        'Are you sure you want to logout? Your progress is saved.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Logout',
+            style: 'destructive',
+            onPress: performLogout,
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const toggleWeeklyAlerts = async (value: boolean) => {
@@ -53,6 +70,7 @@ export default function ProfileScreen() {
     );
   }
 
+  // Calculate BMI based on units
   const bmi = (
     profile.weight /
     Math.pow(profile.heightUnit === 'cm' ? profile.height / 100 : profile.height * 0.3048, 2)
@@ -67,7 +85,7 @@ export default function ProfileScreen() {
           <Text style={styles.headerSub}>Manage your account</Text>
         </View>
         <View style={styles.avatarLarge}>
-          <Text style={styles.avatarText}>{profile.name[0]}</Text>
+          <Text style={styles.avatarText}>{profile.name ? profile.name[0] : 'U'}</Text>
         </View>
       </View>
 
@@ -94,14 +112,14 @@ export default function ProfileScreen() {
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Phone</Text>
-            <Text style={styles.infoValue}>{profile.phone}</Text>
+            <Text style={styles.infoValue}>{profile.phone || 'Not provided'}</Text>
           </View>
         </View>
 
         {/* Body Stats Card */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Body Stats</Text>
-          <View style={styles.statsGrid}>
+          <div style={styles.statsGrid}>
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>Weight</Text>
               <Text style={styles.statValue}>
@@ -124,7 +142,7 @@ export default function ProfileScreen() {
                 {GOAL_LABELS[profile.goal] || profile.goal}
               </Text>
             </View>
-          </View>
+          </div>
 
           <TouchableOpacity
             style={styles.editBtn}
@@ -201,7 +219,7 @@ export default function ProfileScreen() {
         <View style={styles.appInfo}>
           <Text style={styles.appInfoText}>FitGuru v1.0.0</Text>
           <Text style={styles.appInfoText}>
-            Joined {new Date(profile.joinedAt).toLocaleDateString()}
+            Joined {profile.joinedAt ? new Date(profile.joinedAt).toLocaleDateString() : 'N/A'}
           </Text>
         </View>
       </ScrollView>
