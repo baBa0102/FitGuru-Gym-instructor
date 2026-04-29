@@ -14,25 +14,11 @@ import { useAuth } from "../../contexts/AuthContext";
 
 const { width } = Dimensions.get("window");
 
-// ── Mock user data (replace with AsyncStorage/Firebase later) ──
-const USER = {
-  name: "Basit",
-  age: 24,
-  gender: "male",
-  weight: 75,
-  weightUnit: "kg",
-  height: 175,
-  heightUnit: "cm",
-  goal: "build_muscle",
-  joinedDays: 5,
-};
-
 const GOAL_LABELS: Record<string, string> = {
   lose_weight: "Lose weight",
   build_muscle: "Build muscle",
   bulk: "Bulk up",
   lean: "Get lean",
-  muscle_mass: "Muscle mass",
   stay_fit: "Stay fit",
 };
 
@@ -54,42 +40,40 @@ const TOTAL_CALS = TODAY_MEALS.reduce((a, m) => a + m.cals, 0);
 
 export default function HomeScreen() {
   const { profile } = useAuth();
-  const [checkedExercises, setCheckedExercises] = useState<Set<number>>(
-    new Set(),
-  );
+  const [checkedExercises, setCheckedExercises] = useState<Set<number>>(new Set());
+  
   const progressAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(24)).current;
 
-  // BMI calculation
-  const weightKg = USER.weight;
-  const heightM = USER.height / 100;
-  const bmi = (weightKg / (heightM * heightM)).toFixed(1);
-  const bmiNum = parseFloat(bmi);
-  const bmiInfo =
-    bmiNum < 18.5
-      ? { label: "Underweight", color: "#378ADD" }
-      : bmiNum < 25
-        ? { label: "Healthy", color: "#3dbf3d" }
-        : bmiNum < 30
-          ? { label: "Overweight", color: "#ba7517" }
-          : { label: "Obese", color: "#993c1d" };
+  // ── Dynamic User Data ──
+  const weight = profile?.weight || 0;
+  const height = profile?.height || 0;
+  const goal = profile?.goal || 'stay_fit';
+  const userName = profile?.name?.trim() || "User";
 
+  // ── Corrected BMI Logic (Metric: kg/m²) ──
+  const calculateBMI = () => {
+    if (!weight || !height) return { val: "--", label: "No Data", color: "#555" };
+    
+    const heightInMeters = height / 100;
+    const bmiValue = weight / (heightInMeters * heightInMeters);
+    const bmiStr = bmiValue.toFixed(1);
+    const bmiNum = parseFloat(bmiStr);
+
+    if (bmiNum < 18.5) return { val: bmiStr, label: "Underweight", color: "#378ADD" };
+    if (bmiNum < 25) return { val: bmiStr, label: "Healthy", color: "#3dbf3d" };
+    if (bmiNum < 30) return { val: bmiStr, label: "Overweight", color: "#ba7517" };
+    return { val: bmiStr, label: "Obese", color: "#993c1d" };
+  };
+
+  const bmiInfo = calculateBMI();
   const workoutProgress = checkedExercises.size / TODAY_WORKOUT.length;
 
   useEffect(() => {
-    // Entrance animation
     Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
     ]).start();
   }, []);
 
@@ -97,7 +81,7 @@ export default function HomeScreen() {
     Animated.timing(progressAnim, {
       toValue: workoutProgress,
       duration: 400,
-      useNativeDriver: false,
+      useNativeDriver: false, // width animations don't support native driver
     }).start();
   }, [workoutProgress]);
 
@@ -120,50 +104,31 @@ export default function HomeScreen() {
     inputRange: [0, 1],
     outputRange: ["0%", "100%"],
   });
-  const userName = profile?.name?.trim() || USER.name;
 
   return (
     <View style={styles.container}>
       {/* Header */}
-      <Animated.View
-        style={[
-          styles.header,
-          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
-        ]}
-      >
+      <Animated.View style={[styles.header, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
         <View>
           <Text style={styles.greeting}>{greeting()},</Text>
           <Text style={styles.userName}>{userName} 👋</Text>
         </View>
-        <TouchableOpacity
-          style={styles.avatarBtn}
-          onPress={() => router.push("/(tabs)/profile")}
-        >
+        <TouchableOpacity style={styles.avatarBtn} onPress={() => router.push("/(tabs)/profile")}>
           <Text style={styles.avatarText}>{userName[0]}</Text>
         </TouchableOpacity>
       </Animated.View>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <Animated.View
-          style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}
-        >
-          {/* ── BMI Card ── */}
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+          
+          {/* BMI Card */}
           <View style={styles.bmiCard}>
             <View style={styles.bmiLeft}>
               <Text style={styles.bmiCardLabel}>Your BMI</Text>
               <Text style={[styles.bmiCardValue, { color: bmiInfo.color }]}>
-                {bmi}
+                {bmiInfo.val}
               </Text>
-              <View
-                style={[
-                  styles.bmiBadge,
-                  { backgroundColor: bmiInfo.color + "22" },
-                ]}
-              >
+              <View style={[styles.bmiBadge, { backgroundColor: bmiInfo.color + "22" }]}>
                 <Text style={[styles.bmiBadgeText, { color: bmiInfo.color }]}>
                   {bmiInfo.label}
                 </Text>
@@ -172,28 +137,24 @@ export default function HomeScreen() {
             <View style={styles.bmiRight}>
               <View style={styles.bmiStatRow}>
                 <Text style={styles.bmiStatLabel}>Weight</Text>
-                <Text style={styles.bmiStatVal}>
-                  {USER.weight} {USER.weightUnit}
-                </Text>
+                <Text style={styles.bmiStatVal}>{weight} kg</Text>
               </View>
               <View style={styles.bmiDivider} />
               <View style={styles.bmiStatRow}>
                 <Text style={styles.bmiStatLabel}>Height</Text>
-                <Text style={styles.bmiStatVal}>
-                  {USER.height} {USER.heightUnit}
-                </Text>
+                <Text style={styles.bmiStatVal}>{height} cm</Text>
               </View>
               <View style={styles.bmiDivider} />
               <View style={styles.bmiStatRow}>
                 <Text style={styles.bmiStatLabel}>Goal</Text>
                 <Text style={[styles.bmiStatVal, { color: "#3dbf3d" }]}>
-                  {GOAL_LABELS[USER.goal]}
+                  {GOAL_LABELS[goal] || goal}
                 </Text>
               </View>
             </View>
           </View>
 
-          {/* ── Stats Row ── */}
+          {/* Stats Row */}
           <View style={styles.statsRow}>
             <View style={styles.statCard}>
               <Text style={styles.statIcon}>🔥</Text>
@@ -207,29 +168,23 @@ export default function HomeScreen() {
             </View>
             <View style={styles.statCard}>
               <Text style={styles.statIcon}>📅</Text>
-              <Text style={styles.statVal}>{USER.joinedDays}</Text>
+              <Text style={styles.statVal}>1</Text>
               <Text style={styles.statLabel}>day streak</Text>
             </View>
           </View>
 
-          {/* ── Today&apos;s Workout ── */}
+          {/* Today's Workout */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Today&apos;s workout</Text>
+              <Text style={styles.sectionTitle}>Today's workout</Text>
               <TouchableOpacity>
                 <Text style={styles.sectionLink}>See all →</Text>
               </TouchableOpacity>
             </View>
 
-            {/* Progress bar */}
             <View style={styles.workoutProgressWrap}>
               <View style={styles.workoutProgressTrack}>
-                <Animated.View
-                  style={[
-                    styles.workoutProgressFill,
-                    { width: progressBarWidth },
-                  ]}
-                />
+                <Animated.View style={[styles.workoutProgressFill, { width: progressBarWidth }]} />
               </View>
               <Text style={styles.workoutProgressLabel}>
                 {checkedExercises.size}/{TODAY_WORKOUT.length} done
@@ -239,30 +194,15 @@ export default function HomeScreen() {
             {TODAY_WORKOUT.map((ex, i) => (
               <TouchableOpacity
                 key={i}
-                style={[
-                  styles.exerciseRow,
-                  checkedExercises.has(i) && styles.exerciseRowDone,
-                ]}
+                style={[styles.exerciseRow, checkedExercises.has(i) && styles.exerciseRowDone]}
                 onPress={() => toggleExercise(i)}
                 activeOpacity={0.75}
               >
-                <View
-                  style={[
-                    styles.exerciseCheck,
-                    checkedExercises.has(i) && styles.exerciseCheckDone,
-                  ]}
-                >
-                  {checkedExercises.has(i) && (
-                    <Text style={styles.checkMark}>✓</Text>
-                  )}
+                <View style={[styles.exerciseCheck, checkedExercises.has(i) && styles.exerciseCheckDone]}>
+                  {checkedExercises.has(i) && <Text style={styles.checkMark}>✓</Text>}
                 </View>
                 <View style={styles.exerciseInfo}>
-                  <Text
-                    style={[
-                      styles.exerciseName,
-                      checkedExercises.has(i) && styles.exerciseNameDone,
-                    ]}
-                  >
+                  <Text style={[styles.exerciseName, checkedExercises.has(i) && styles.exerciseNameDone]}>
                     {ex.name}
                   </Text>
                   <Text style={styles.exerciseMuscle}>{ex.muscle}</Text>
@@ -270,22 +210,14 @@ export default function HomeScreen() {
                 <Text style={styles.exerciseSets}>{ex.sets}</Text>
               </TouchableOpacity>
             ))}
-
-            {checkedExercises.size === TODAY_WORKOUT.length && (
-              <View style={styles.completedBanner}>
-                <Text style={styles.completedText}>
-                  🎉 Workout complete! Great job today.
-                </Text>
-              </View>
-            )}
           </View>
 
-          {/* ── Today&apos;s Diet ── */}
+          {/* Today's Diet */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Today&apos;s diet</Text>
-              <TouchableOpacity>
-                <Text style={styles.sectionLink}>See all →</Text>
+              <Text style={styles.sectionTitle}>Today's diet</Text>
+              <TouchableOpacity onPress={() => router.push("/(tabs)/diet")}>
+                <Text style={styles.sectionLink}>Plan →</Text>
               </TouchableOpacity>
             </View>
 
@@ -306,19 +238,6 @@ export default function HomeScreen() {
               </View>
             ))}
           </View>
-
-          {/* ── Weekly check-in banner ── */}
-          <View style={styles.checkinBanner}>
-            <View style={styles.checkinLeft}>
-              <Text style={styles.checkinTitle}>Weekly check-in</Text>
-              <Text style={styles.checkinSub}>
-                Log your weight to track progress
-              </Text>
-            </View>
-            <TouchableOpacity style={styles.checkinBtn}>
-              <Text style={styles.checkinBtnText}>Log weight</Text>
-            </TouchableOpacity>
-          </View>
         </Animated.View>
       </ScrollView>
     </View>
@@ -327,7 +246,6 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0a0a0a" },
-
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -337,12 +255,7 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   greeting: { fontSize: 14, color: "#555", marginBottom: 2 },
-  userName: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#f0f0f0",
-    letterSpacing: -0.5,
-  },
+  userName: { fontSize: 24, fontWeight: "700", color: "#f0f0f0", letterSpacing: -0.5 },
   avatarBtn: {
     width: 42,
     height: 42,
@@ -354,11 +267,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   avatarText: { fontSize: 16, fontWeight: "700", color: "#3dbf3d" },
-
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, paddingBottom: 100 },
-
-  // BMI card
   bmiCard: {
     backgroundColor: "#111",
     borderRadius: 20,
@@ -370,28 +280,15 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   bmiLeft: { alignItems: "center", justifyContent: "center", minWidth: 80 },
-  bmiCardLabel: {
-    fontSize: 10,
-    color: "#444",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-    marginBottom: 4,
-  },
+  bmiCardLabel: { fontSize: 10, color: "#444", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 4 },
   bmiCardValue: { fontSize: 40, fontWeight: "700", letterSpacing: -1 },
-  bmiBadge: {
-    marginTop: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 20,
-  },
+  bmiBadge: { marginTop: 6, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
   bmiBadgeText: { fontSize: 11, fontWeight: "700" },
   bmiRight: { flex: 1, justifyContent: "center", gap: 8 },
   bmiStatRow: { flexDirection: "row", justifyContent: "space-between" },
   bmiStatLabel: { fontSize: 12, color: "#555" },
   bmiStatVal: { fontSize: 12, color: "#bbb", fontWeight: "600" },
   bmiDivider: { height: 0.5, backgroundColor: "#1a1a1a" },
-
-  // Stats row
   statsRow: { flexDirection: "row", gap: 10, marginBottom: 24 },
   statCard: {
     flex: 1,
@@ -404,15 +301,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   statIcon: { fontSize: 20 },
-  statVal: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#f0f0f0",
-    letterSpacing: -0.5,
-  },
+  statVal: { fontSize: 20, fontWeight: "700", color: "#f0f0f0", letterSpacing: -0.5 },
   statLabel: { fontSize: 10, color: "#444", letterSpacing: 0.3 },
-
-  // Sections
   section: {
     backgroundColor: "#111",
     borderRadius: 20,
@@ -421,41 +311,13 @@ const styles = StyleSheet.create({
     borderColor: "#1e1e1e",
     marginBottom: 16,
   },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 14,
-  },
+  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
   sectionTitle: { fontSize: 16, fontWeight: "700", color: "#f0f0f0" },
   sectionLink: { fontSize: 12, color: "#3dbf3d" },
-
-  // Workout
-  workoutProgressWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 14,
-  },
-  workoutProgressTrack: {
-    flex: 1,
-    height: 3,
-    backgroundColor: "#1a1a1a",
-    borderRadius: 2,
-    overflow: "hidden",
-  },
-  workoutProgressFill: {
-    height: "100%",
-    backgroundColor: "#3dbf3d",
-    borderRadius: 2,
-  },
-  workoutProgressLabel: {
-    fontSize: 11,
-    color: "#555",
-    minWidth: 48,
-    textAlign: "right",
-  },
-
+  workoutProgressWrap: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
+  workoutProgressTrack: { flex: 1, height: 3, backgroundColor: "#1a1a1a", borderRadius: 2, overflow: "hidden" },
+  workoutProgressFill: { height: "100%", backgroundColor: "#3dbf3d", borderRadius: 2 },
+  workoutProgressLabel: { fontSize: 11, color: "#555", minWidth: 48, textAlign: "right" },
   exerciseRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -477,41 +339,13 @@ const styles = StyleSheet.create({
   exerciseCheckDone: { backgroundColor: "#3dbf3d", borderColor: "#3dbf3d" },
   checkMark: { fontSize: 11, color: "#0a0a0a", fontWeight: "700" },
   exerciseInfo: { flex: 1 },
-  exerciseName: {
-    fontSize: 14,
-    color: "#ccc",
-    fontWeight: "500",
-    marginBottom: 2,
-  },
+  exerciseName: { fontSize: 14, color: "#ccc", fontWeight: "500", marginBottom: 2 },
   exerciseNameDone: { textDecorationLine: "line-through", color: "#444" },
   exerciseMuscle: { fontSize: 11, color: "#444" },
   exerciseSets: { fontSize: 12, color: "#555", fontWeight: "600" },
-
-  completedBanner: {
-    marginTop: 12,
-    backgroundColor: "#0d1f0d",
-    borderRadius: 12,
-    padding: 12,
-    alignItems: "center",
-    borderWidth: 0.5,
-    borderColor: "#1e3e1e",
-  },
-  completedText: { color: "#3dbf3d", fontSize: 13, fontWeight: "600" },
-
-  // Diet
-  calorieSummary: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    marginBottom: 14,
-  },
-  calorieNum: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#3dbf3d",
-    letterSpacing: -0.5,
-  },
+  calorieSummary: { flexDirection: "row", alignItems: "baseline", marginBottom: 14 },
+  calorieNum: { fontSize: 22, fontWeight: "700", color: "#3dbf3d", letterSpacing: -0.5 },
   calorieLabel: { fontSize: 12, color: "#444" },
-
   mealRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -520,49 +354,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.5,
     borderBottomColor: "#1a1a1a",
   },
-  mealTimeWrap: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    minWidth: 70,
-    alignItems: "center",
-  },
-  mealTime: {
-    fontSize: 10,
-    color: "#555",
-    fontWeight: "600",
-    letterSpacing: 0.3,
-  },
+  mealTimeWrap: { backgroundColor: "#1a1a1a", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, minWidth: 70, alignItems: "center" },
+  mealTime: { fontSize: 10, color: "#555", fontWeight: "600", letterSpacing: 0.3 },
   mealInfo: { flex: 1 },
   mealName: { fontSize: 12, color: "#aaa", lineHeight: 18 },
   mealCals: { fontSize: 11, color: "#444", fontWeight: "600" },
-
-  // Check-in banner
-  checkinBanner: {
-    backgroundColor: "#0d1f0d",
-    borderRadius: 16,
-    padding: 18,
-    borderWidth: 0.5,
-    borderColor: "#1e3e1e",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
-  checkinLeft: { flex: 1 },
-  checkinTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#3dbf3d",
-    marginBottom: 2,
-  },
-  checkinSub: { fontSize: 12, color: "#3a6e3a" },
-  checkinBtn: {
-    backgroundColor: "#3dbf3d",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  checkinBtnText: { fontSize: 12, fontWeight: "700", color: "#0a0a0a" },
 });
