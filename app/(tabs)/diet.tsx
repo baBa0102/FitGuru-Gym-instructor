@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 
+// 1. Define specific interfaces for type safety
 interface Meal {
   time: string;
   name: string;
@@ -18,114 +19,170 @@ interface Meal {
   carbs: number;
   fats: number;
   foods: string[];
-  alternatives?: string[];
+}
+
+interface UserProfile {
+  name: string;
+  age: number;
+  gender: 'male' | 'female' | 'other';
+  weight: number;
+  height: number;
+  goal: string;
 }
 
 export default function DietScreen() {
   const { profile } = useAuth();
   const [meals, setMeals] = useState<Meal[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedMeal, setSelectedMeal] = useState<Meal | null>(null);
+  const [targetCalories, setTargetCalories] = useState(0);
 
   useEffect(() => {
-    if (profile) {
+    if (profile?.weight && profile?.height) {
       generateDietPlan();
     }
   }, [profile]);
 
+  const createMealsFromTarget = (totalCals: number): Meal[] => {
+  // 1. Calculate specific Macros based on the target calories
+  const proteinGrams = Math.round((totalCals * 0.3) / 4);
+  const carbsGrams = Math.round((totalCals * 0.4) / 4);
+  const fatsGrams = Math.round((totalCals * 0.3) / 9);
+
+  // 2. Define a scaling factor (Standardizing against a 2000kcal base)
+  const scale = totalCals / 2000;
+
+  // 3. Helper to round measurements to the nearest 5 for clean UI
+  const r5 = (val: number) => Math.round(val / 5) * 5;
+
+  return [
+    {
+      time: "Breakfast (25%)",
+      name: "High-Protein Oats & Fruit",
+      calories: Math.round(totalCals * 0.25),
+      protein: Math.round(proteinGrams * 0.25),
+      carbs: Math.round(carbsGrams * 0.25),
+      fats: Math.round(fatsGrams * 0.25),
+      foods: [
+        `${r5(70 * scale)}g Rolled Oats`,
+        `${Math.max(1, Math.round(1.5 * scale))} Boiled Eggs`,
+        `${r5(150 * scale)}ml Low-fat Milk`,
+        "1 Medium Banana"
+      ]
+    },
+    {
+      time: "Lunch (35%)",
+      name: "Lean Protein & Complex Carbs",
+      calories: Math.round(totalCals * 0.35),
+      protein: Math.round(proteinGrams * 0.35),
+      carbs: Math.round(carbsGrams * 0.35),
+      fats: Math.round(fatsGrams * 0.35),
+      foods: [
+        `${r5(150 * scale)}g Grilled Chicken or Paneer`,
+        `${r5(80 * scale)}g Brown Rice (Dry weight)`,
+        "1 Cup Steamed Broccoli",
+        `${(1.5 * scale).toFixed(1)} tsp Olive Oil`
+      ]
+    },
+    {
+      time: "Snack (15%)",
+      name: "Fuel & Recovery",
+      calories: Math.round(totalCals * 0.15),
+      protein: Math.round(proteinGrams * 0.15),
+      carbs: Math.round(carbsGrams * 0.15),
+      fats: Math.round(fatsGrams * 0.15),
+      foods: [
+        "1 Scoop Whey Protein or Greek Yogurt",
+        "1 Apple or Pear",
+        `${r5(20 * scale)}g Mixed Nuts`
+      ]
+    },
+    {
+      time: "Dinner (25%)",
+      name: "Light Balanced Recovery",
+      calories: Math.round(totalCals * 0.25),
+      protein: Math.round(proteinGrams * 0.25),
+      carbs: Math.round(carbsGrams * 0.25),
+      fats: Math.round(fatsGrams * 0.25),
+      foods: [
+        `${r5(120 * scale)}g Grilled Fish or Dal`,
+        `${Math.max(1, Math.round(2 * scale))} Whole Wheat Rotis`,
+        "Large Green Salad",
+        `${r5(30 * scale)}g Avocado or Hummus`
+      ]
+    }
+  ];
+};
+
   const generateDietPlan = async () => {
-    if (!profile) return; // Fixes 'profile possibly null' error
+    if (!profile || !profile.weight || !profile.height) return;
 
     setLoading(true);
     try {
-      // Create query string for the API
+      let finalTdee = 0;
+
+      // Try API first
       const queryParams = new URLSearchParams({
         weight: profile.weight.toString(),
         height: profile.height.toString(),
         age: profile.age.toString(),
-        gender: profile.gender,
-        activitylevel: '3', // Default moderate activity
-        goal: profile.goal
+        gender: profile.gender.toLowerCase(),
+        activity: "1.55", 
       }).toString();
 
-      // Note: Edamam Nutrition Data API usually takes an 'ingr' (ingredient) query. 
-      // For a full meal plan calculation, you might actually want the Fitness Calculator API
-      // But here is the corrected fetch syntax for your current RapidAPI setup:
-      const response = await fetch(`https://fitness-calculator.p.rapidapi.com/dailycalorie?${queryParams}`, {
-        method: 'GET',
-        headers: {
-          'x-rapidapi-key': process.env.EXPO_PUBLIC_RAPID_API_KEY || '',
-          'x-rapidapi-host': 'fitness-calculator.p.rapidapi.com'
+      const response = await fetch(
+        `https://gym-calculations.p.rapidapi.com/bmr?${queryParams}`,
+        {
+          method: 'GET',
+          headers: {
+            'x-rapidapi-key': process.env.EXPO_PUBLIC_RAPID_API_KEY || '',
+            'x-rapidapi-host': 'gym-calculations.p.rapidapi.com'
+          }
         }
-      });
+      );
 
       const data = await response.json();
 
-      if (data.status_code === 200) {
-        // Here you would take the calories from data.data.goals and 
-        // set your meal state. For now, we will update the mock to use the real target.
-        const targetCals = data.data.goals['Weight maintainance'];
-        
-        // This is where you would map your API response to your Meal interface
-        // Example of adjusting mock data to real API target:
-        const adjustedMockMeals: Meal[] = [
-          {
-            time: 'Breakfast',
-            name: 'High-Protein Start',
-            calories: Math.round(targetCals * 0.25),
-            protein: 30, carbs: 40, fats: 12,
-            foods: ['Oats with protein scoop', '2 Boiled Eggs'],
-          },
-          {
-            time: 'Lunch',
-            name: 'Balanced Power Meal',
-            calories: Math.round(targetCals * 0.35),
-            protein: 40, carbs: 50, fats: 15,
-            foods: ['Chicken/Paneer (150g)', 'Brown Rice (1 cup)', 'Green Salad'],
-          },
-          {
-            time: 'Dinner',
-            name: 'Recovery Meal',
-            calories: Math.round(targetCals * 0.30),
-            protein: 35, carbs: 30, fats: 10,
-            foods: ['Grilled Fish/Dal', '2 Whole Wheat Rotis', 'Mixed Veggies'],
-          },
-          {
-            time: 'Snacks',
-            name: 'Fuel',
-            calories: Math.round(targetCals * 0.10),
-            protein: 15, carbs: 20, fats: 5,
-            foods: ['Greek Yogurt' , 'Apple'],
-          }
-        ];
-        setMeals(adjustedMockMeals);
+      if (data && data.tdee) {
+        finalTdee = Math.round(data.tdee);
+      } else {
+        // Fallback to local calculation if API fails or 404s
+        let bmr = (10 * profile.weight) + (6.25 * profile.height) - (5 * profile.age);
+        bmr = profile.gender === 'male' ? bmr + 5 : bmr - 161;
+        finalTdee = Math.round(bmr * 1.55);
       }
+
+      // 3. Goal Adjustment
+      let adjustedTarget = finalTdee;
+      if (profile.goal === 'build_muscle' || profile.goal === 'bulk') adjustedTarget += 400;
+      else if (profile.goal === 'lose_weight') adjustedTarget -= 500;
+
+      setTargetCalories(adjustedTarget);
+      setMeals(createMealsFromTarget(adjustedTarget));
+
     } catch (error) {
       console.error("Diet Generation Error:", error);
+      // Immediate local fallback on network error
+      const bmr = (10 * profile.weight) + (6.25 * profile.height) - (5 * profile.age);
+      const fallbackTdee = Math.round((profile.gender === 'male' ? bmr + 5 : bmr - 161) * 1.55);
+      setTargetCalories(fallbackTdee);
+      setMeals(createMealsFromTarget(fallbackTdee));
     } finally {
       setLoading(false);
     }
   };
 
-  const totalCalories = meals.reduce((sum, m) => sum + m.calories, 0);
   const totalProtein = meals.reduce((sum, m) => sum + m.protein, 0);
   const totalCarbs = meals.reduce((sum, m) => sum + m.carbs, 0);
   const totalFats = meals.reduce((sum, m) => sum + m.fats, 0);
 
-  if (!profile) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator color="#3dbf3d" style={{ marginTop: 100 }} />
-      </View>
-    );
-  }
+  if (!profile) return null;
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Diet Plan</Text>
-          <Text style={styles.headerSub}>AI-calculated for {profile.goal}</Text>
+          <Text style={styles.headerSub}>AI-calculated for {profile.goal.replace('_', ' ')}</Text>
         </View>
         <TouchableOpacity style={styles.refreshBtn} onPress={generateDietPlan}>
           <Text style={styles.refreshIcon}>↻</Text>
@@ -135,7 +192,7 @@ export default function DietScreen() {
       {loading ? (
         <View style={styles.centered}>
           <ActivityIndicator color="#3dbf3d" size="large" />
-          <Text style={styles.loadingText}>Calculating your requirements...</Text>
+          <Text style={styles.loadingText}>Analyzing profile...</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -143,7 +200,7 @@ export default function DietScreen() {
             <Text style={styles.summaryTitle}>Daily Target</Text>
             <View style={styles.macroRow}>
               <View style={styles.macroBox}>
-                <Text style={styles.macroValue}>{totalCalories}</Text>
+                <Text style={styles.macroValue}>{targetCalories}</Text>
                 <Text style={styles.macroLabel}>Calories</Text>
               </View>
               <View style={styles.macroBox}>
@@ -162,7 +219,7 @@ export default function DietScreen() {
           </View>
 
           {meals.map((meal, i) => (
-            <TouchableOpacity key={i} style={styles.mealCard} onPress={() => setSelectedMeal(meal)} activeOpacity={0.8}>
+            <View key={i} style={styles.mealCard}>
               <View style={styles.mealHeader}>
                 <Text style={styles.mealTime}>{meal.time}</Text>
                 <Text style={styles.mealCals}>{meal.calories} kcal</Text>
@@ -181,13 +238,14 @@ export default function DietScreen() {
                   </View>
                 ))}
               </View>
-            </TouchableOpacity>
+            </View>
           ))}
         </ScrollView>
       )}
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a0a' },
