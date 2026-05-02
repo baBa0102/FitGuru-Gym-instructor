@@ -113,59 +113,22 @@ export default function DietScreen() {
   ];
 };
 
-  const generateDietPlan = async () => {
+  const generateDietPlan = () => {
     if (!profile || !profile.weight || !profile.height) return;
 
     setLoading(true);
     try {
-      let finalTdee = 0;
+      
+      let bmr = 10 * profile.weight + 6.25 * profile.height - 5 * profile.age;
+      bmr = profile.gender === 'male' ? bmr + 5 : bmr - 161;
+      const finalTdee = Math.round(bmr * 1.55);
 
-      // Try API first
-      const queryParams = new URLSearchParams({
-        weight: profile.weight.toString(),
-        height: profile.height.toString(),
-        age: profile.age.toString(),
-        gender: profile.gender.toLowerCase(),
-        activity: "1.55", 
-      }).toString();
-
-      const response = await fetch(
-        `https://gym-calculations.p.rapidapi.com/bmr?${queryParams}`,
-        {
-          method: 'GET',
-          headers: {
-            'x-rapidapi-key': process.env.EXPO_PUBLIC_RAPID_API_KEY || '',
-            'x-rapidapi-host': 'gym-calculations.p.rapidapi.com'
-          }
-        }
-      );
-
-      const data = await response.json();
-
-      if (data && data.tdee) {
-        finalTdee = Math.round(data.tdee);
-      } else {
-        // Fallback to local calculation if API fails or 404s
-        let bmr = (10 * profile.weight) + (6.25 * profile.height) - (5 * profile.age);
-        bmr = profile.gender === 'male' ? bmr + 5 : bmr - 161;
-        finalTdee = Math.round(bmr * 1.55);
-      }
-
-      // 3. Goal Adjustment
       let adjustedTarget = finalTdee;
       if (profile.goal === 'build_muscle' || profile.goal === 'bulk') adjustedTarget += 400;
       else if (profile.goal === 'lose_weight') adjustedTarget -= 500;
 
       setTargetCalories(adjustedTarget);
       setMeals(createMealsFromTarget(adjustedTarget));
-
-    } catch (error) {
-      console.error("Diet Generation Error:", error);
-      // Immediate local fallback on network error
-      const bmr = (10 * profile.weight) + (6.25 * profile.height) - (5 * profile.age);
-      const fallbackTdee = Math.round((profile.gender === 'male' ? bmr + 5 : bmr - 161) * 1.55);
-      setTargetCalories(fallbackTdee);
-      setMeals(createMealsFromTarget(fallbackTdee));
     } finally {
       setLoading(false);
     }
@@ -182,7 +145,7 @@ export default function DietScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Diet Plan</Text>
-          <Text style={styles.headerSub}>AI-calculated for {profile.goal.replace('_', ' ')}</Text>
+          <Text style={styles.headerSub}>TDEE-based plan for {profile.goal.replace('_', ' ')}</Text>
         </View>
         <TouchableOpacity style={styles.refreshBtn} onPress={generateDietPlan}>
           <Text style={styles.refreshIcon}>↻</Text>

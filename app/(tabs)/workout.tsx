@@ -29,7 +29,7 @@ const ALL_MUSCLES = [
   { id: "neck", label: "Neck", icon: "🔝" },
 ];
 
-// ── Mock user (replace with AsyncStorage later) ──
+// ── Mock user datsa ──
 const USER = {
   name: "Basit",
   gender: "male" as "male" | "female",
@@ -48,6 +48,10 @@ const DEFAULT_DAY_PLANS: Record<number, string[]> = {
   6: ["rest"],
 };
 
+/** Fallback exercise art when using mock data; v2.exercisedb.io often returns 5xx. */
+const MOCK_EXERCISE_IMAGE_URI =
+  "https://placehold.co/360x360/1a1a1a/3dbf3d/png?text=Exercise";
+
 interface Exercise {
   id: string;
   name: string;
@@ -55,12 +59,22 @@ interface Exercise {
   target: string;
   equipment: string;
   gifUrl: string;
+  /** Native only: RapidAPI auth for exercisedb image requests (web uses query param on gifUrl). */
+  gifAuthHeaders?: Record<string, string>;
   instructions: string[];
   secondaryMuscles: string[];
 }
 
 // ── GIF Image with loading skeleton ──
-function GifImage({ uri, style }: { uri: string; style: any }) {
+function GifImage({
+  uri,
+  headers,
+  style,
+}: {
+  uri: string;
+  headers?: Record<string, string>;
+  style: any;
+}) {
   const [loaded, setLoaded] = useState(false);
   const [errored, setErrored] = useState(false);
   const shimmer = useRef(new Animated.Value(0)).current;
@@ -137,7 +151,11 @@ function GifImage({ uri, style }: { uri: string; style: any }) {
 
       {/* Actual GIF */}
       <Image
-        source={{ uri }}
+        source={
+          headers && Object.keys(headers).length > 0
+            ? { uri, headers }
+            : { uri }
+        }
         style={[
           style,
           {
@@ -204,15 +222,13 @@ export default function WorkoutScreen() {
   try {
     const responses = await Promise.all(
       muscles.map(async (muscle) => {
-        const response = await fetch(
-          `https://exercisedb.p.rapidapi.com/exercises/bodyPart/${muscle}?limit=10`,
-          {
-            headers: {
-              "X-RapidAPI-Key": API_KEY,
-              "X-RapidAPI-Host": "exercisedb.p.rapidapi.com",
-            },
-          }
-        );
+        const listUrl = `https://exercisedb.p.rapidapi.com/exercises/bodyPart/${encodeURIComponent(muscle)}?limit=10`;
+        const response = await fetch(listUrl, {
+          headers: {
+            "X-RapidAPI-Key": API_KEY,
+            "X-RapidAPI-Host": "exercisedb.p.rapidapi.com",
+          },
+        });
 
         if (!response.ok) {
           const errorMsg = await response.text();
@@ -220,16 +236,29 @@ export default function WorkoutScreen() {
         }
 
         const data = await response.json();
-        return data.map((ex: any) => ({
-          id: ex.id,
-          name: ex.name,
-          bodyPart: ex.bodyPart,
-          target: ex.target,
-          equipment: ex.equipment,
-          gifUrl: `https://exercisedb.p.rapidapi.com/image?exerciseId=${ex.id}&resolution=360&rapidapi-key=${API_KEY}`,
-          instructions: ex.instructions || [],
-          secondaryMuscles: ex.secondaryMuscles || [],
-        }));
+        return data.map((ex: any) => {
+          const idEnc = encodeURIComponent(String(ex.id));
+          const baseQs = `https://exercisedb.p.rapidapi.com/image?exerciseId=${idEnc}&resolution=180`;
+          const useHeaderAuth = Platform.OS !== "web";
+          return {
+            id: ex.id,
+            name: ex.name,
+            bodyPart: ex.bodyPart,
+            target: ex.target,
+            equipment: ex.equipment,
+            gifUrl: useHeaderAuth
+              ? baseQs
+              : `${baseQs}&rapidapi-key=${encodeURIComponent(API_KEY)}`,
+            gifAuthHeaders: useHeaderAuth
+              ? {
+                  "X-RapidAPI-Key": API_KEY,
+                  "X-RapidAPI-Host": "exercisedb.p.rapidapi.com",
+                }
+              : undefined,
+            instructions: ex.instructions || [],
+            secondaryMuscles: ex.secondaryMuscles || [],
+          };
+        });
       })
     );
 
@@ -506,7 +535,11 @@ export default function WorkoutScreen() {
             >
               {/* GIF thumbnail */}
               <View style={styles.gifWrap}>
-                <GifImage uri={ex.gifUrl} style={styles.gifThumb} />
+                <GifImage
+                  uri={ex.gifUrl}
+                  headers={ex.gifAuthHeaders}
+                  style={styles.gifThumb}
+                />
                 {USER.gender === "female" && (
                   <View style={styles.genderTag}>
                     <Text style={styles.genderTagText}>♀</Text>
@@ -587,6 +620,7 @@ export default function WorkoutScreen() {
                   {/* GIF */}
                   <GifImage
                     uri={selectedExercise.gifUrl}
+                    headers={selectedExercise.gifAuthHeaders}
                     style={styles.modalGif}
                   />
 
@@ -775,7 +809,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "chest",
       target: "pectorals",
       equipment: "barbell",
-      gifUrl: "https://v2.exercisedb.io/image/HoGkqBPLkH2Jg7",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Lie flat on bench",
         "Grip bar slightly wider than shoulders",
@@ -791,7 +825,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "chest",
       target: "pectorals",
       equipment: "body weight",
-      gifUrl: "https://v2.exercisedb.io/image/X9MOw8pFSB5BLe",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Start in high plank",
         "Keep core tight",
@@ -806,7 +840,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "chest",
       target: "pectorals",
       equipment: "dumbbell",
-      gifUrl: "https://v2.exercisedb.io/image/uI3MGSdJJ8Ryby",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Set bench to 30-45°",
         "Hold dumbbells at chest level",
@@ -821,7 +855,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "chest",
       target: "pectorals",
       equipment: "cable",
-      gifUrl: "https://v2.exercisedb.io/image/z0JJHf-E3WTLWZ",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Stand between cables",
         "Set cables to chest height",
@@ -836,7 +870,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "chest",
       target: "pectorals",
       equipment: "body weight",
-      gifUrl: "https://v2.exercisedb.io/image/YKk2jqJTKkhOu6",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Grip parallel bars",
         "Lean slightly forward",
@@ -853,7 +887,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "back",
       target: "lats",
       equipment: "body weight",
-      gifUrl: "https://v2.exercisedb.io/image/HWnqGMOzOe3m5L",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Hang from bar with overhand grip",
         "Pull chest toward bar",
@@ -867,7 +901,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "back",
       target: "lats",
       equipment: "barbell",
-      gifUrl: "https://v2.exercisedb.io/image/jKLjGpZHuFIGKH",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Hinge at hips",
         "Pull bar to lower chest",
@@ -882,7 +916,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "back",
       target: "lats",
       equipment: "cable",
-      gifUrl: "https://v2.exercisedb.io/image/HoGkqBPLkH2Jg7",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Grip bar wide",
         "Pull to upper chest",
@@ -897,7 +931,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "back",
       target: "lats",
       equipment: "cable",
-      gifUrl: "https://v2.exercisedb.io/image/uI3MGSdJJ8Ryby",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Sit upright",
         "Pull handle to abdomen",
@@ -914,7 +948,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "upper legs",
       target: "quads",
       equipment: "barbell",
-      gifUrl: "https://v2.exercisedb.io/image/X9MOw8pFSB5BLe",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Bar on upper traps",
         "Feet shoulder-width",
@@ -929,7 +963,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "upper legs",
       target: "quads",
       equipment: "machine",
-      gifUrl: "https://v2.exercisedb.io/image/z0JJHf-E3WTLWZ",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Seat back fully",
         "Feet hip-width on plate",
@@ -944,7 +978,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "upper legs",
       target: "hamstrings",
       equipment: "barbell",
-      gifUrl: "https://v2.exercisedb.io/image/YKk2jqJTKkhOu6",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Stand hip-width",
         "Hinge at hips",
@@ -959,7 +993,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "upper legs",
       target: "quads",
       equipment: "body weight",
-      gifUrl: "https://v2.exercisedb.io/image/HWnqGMOzOe3m5L",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Step forward into lunge",
         "Back knee near floor",
@@ -976,7 +1010,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "upper arms",
       target: "biceps",
       equipment: "barbell",
-      gifUrl: "https://v2.exercisedb.io/image/jKLjGpZHuFIGKH",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Stand with bar at hips",
         "Curl up to shoulder height",
@@ -991,7 +1025,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "upper arms",
       target: "triceps",
       equipment: "cable",
-      gifUrl: "https://v2.exercisedb.io/image/HoGkqBPLkH2Jg7",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Grip rope or bar",
         "Keep elbows pinned",
@@ -1006,7 +1040,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "upper arms",
       target: "biceps",
       equipment: "dumbbell",
-      gifUrl: "https://v2.exercisedb.io/image/uI3MGSdJJ8Ryby",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Neutral grip",
         "Curl up keeping wrists straight",
@@ -1020,7 +1054,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "upper arms",
       target: "triceps",
       equipment: "barbell",
-      gifUrl: "https://v2.exercisedb.io/image/X9MOw8pFSB5BLe",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Lie on bench",
         "Lower bar to forehead",
@@ -1037,7 +1071,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "shoulders",
       target: "delts",
       equipment: "barbell",
-      gifUrl: "https://v2.exercisedb.io/image/z0JJHf-E3WTLWZ",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Stand with bar at chest",
         "Press overhead",
@@ -1052,7 +1086,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "shoulders",
       target: "delts",
       equipment: "dumbbell",
-      gifUrl: "https://v2.exercisedb.io/image/YKk2jqJTKkhOu6",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Hold dumbbells at sides",
         "Raise arms to shoulder height",
@@ -1067,7 +1101,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "shoulders",
       target: "delts",
       equipment: "cable",
-      gifUrl: "https://v2.exercisedb.io/image/HWnqGMOzOe3m5L",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Set cable high",
         "Pull rope to face",
@@ -1084,7 +1118,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "waist",
       target: "abs",
       equipment: "body weight",
-      gifUrl: "https://v2.exercisedb.io/image/jKLjGpZHuFIGKH",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Forearms on floor",
         "Body straight from head to toe",
@@ -1099,7 +1133,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "waist",
       target: "abs",
       equipment: "body weight",
-      gifUrl: "https://v2.exercisedb.io/image/HoGkqBPLkH2Jg7",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Lie on back",
         "Feet flat on floor",
@@ -1114,7 +1148,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "waist",
       target: "abs",
       equipment: "body weight",
-      gifUrl: "https://v2.exercisedb.io/image/uI3MGSdJJ8Ryby",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Sit with feet raised",
         "Lean back slightly",
@@ -1129,7 +1163,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "waist",
       target: "abs",
       equipment: "body weight",
-      gifUrl: "https://v2.exercisedb.io/image/X9MOw8pFSB5BLe",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Lie flat",
         "Keep legs straight",
@@ -1146,7 +1180,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "cardio",
       target: "cardiovascular system",
       equipment: "body weight",
-      gifUrl: "https://v2.exercisedb.io/image/z0JJHf-E3WTLWZ",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Stand upright",
         "Jump feet wide while raising arms",
@@ -1161,7 +1195,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "cardio",
       target: "cardiovascular system",
       equipment: "rope",
-      gifUrl: "https://v2.exercisedb.io/image/YKk2jqJTKkhOu6",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Hold handles at hip level",
         "Swing rope overhead",
@@ -1176,7 +1210,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "cardio",
       target: "cardiovascular system",
       equipment: "body weight",
-      gifUrl: "https://v2.exercisedb.io/image/HWnqGMOzOe3m5L",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Stand, squat and place hands",
         "Jump feet back to plank",
@@ -1191,7 +1225,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "cardio",
       target: "cardiovascular system",
       equipment: "body weight",
-      gifUrl: "https://v2.exercisedb.io/image/jKLjGpZHuFIGKH",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "High plank position",
         "Drive knees alternately to chest",
@@ -1208,7 +1242,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "lower legs",
       target: "calves",
       equipment: "body weight",
-      gifUrl: "https://v2.exercisedb.io/image/HoGkqBPLkH2Jg7",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Stand on edge of step",
         "Rise onto toes fully",
@@ -1223,7 +1257,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "lower legs",
       target: "calves",
       equipment: "machine",
-      gifUrl: "https://v2.exercisedb.io/image/uI3MGSdJJ8Ryby",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Sit with pads on knees",
         "Push up onto toes",
@@ -1240,7 +1274,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "lower arms",
       target: "forearms",
       equipment: "barbell",
-      gifUrl: "https://v2.exercisedb.io/image/X9MOw8pFSB5BLe",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Forearms on thighs",
         "Curl wrists up",
@@ -1255,7 +1289,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "lower arms",
       target: "forearms",
       equipment: "barbell",
-      gifUrl: "https://v2.exercisedb.io/image/z0JJHf-E3WTLWZ",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Overhand grip",
         "Curl bar to shoulders",
@@ -1272,7 +1306,7 @@ const MOCK_BY_MUSCLE: Record<string, Exercise[]> = {
       bodyPart: "neck",
       target: "sternocleidomastoid",
       equipment: "body weight",
-      gifUrl: "https://v2.exercisedb.io/image/YKk2jqJTKkhOu6",
+      gifUrl: MOCK_EXERCISE_IMAGE_URI,
       instructions: [
         "Sit upright",
         "Slowly lower chin to chest",
